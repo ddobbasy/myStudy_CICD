@@ -39,7 +39,7 @@ jobs:
     - name: Check formatting with Black
       run: |
         # --check 옵션은 파일 내용을 직접 수정하지 않고, 포맷이 맞지 않으면 빌드를 실패 처리합니다.
-        black --check -diff .
+        black --check --diff .
 
     # 6. Pytest 테스트 수행 및 커버리지 검증 (80% 이상 조건 적용)
     - name: Run tests and verify coverage
