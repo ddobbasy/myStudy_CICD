@@ -412,7 +412,7 @@ async def create_settlement(req: SettlementRequest):
         # 예상치 못한 오류 발생 시 500 Internal Server Error 반환
         # 실무에서는 더 구체적인 에러 타입을 정의해서 처리합니다.
         logger.error("정산 생성 오류: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.get(

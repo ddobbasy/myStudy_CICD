@@ -33,7 +33,7 @@ jobs:
     - name: Lint with Ruff
       run: |
         # --format=github 옵션은 에러 발생 시 깃허브 PR 창에 직접 어노테이션을 달아줍니다.
-        ruff check . --format=github
+        ruff check . #--format=github
 
     # 5. Black을 이용한 코드 스타일 통일성 검사
     - name: Check formatting with Black
