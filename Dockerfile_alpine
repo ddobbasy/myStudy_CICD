@@ -1,0 +1,55 @@
+# ==============================================================================
+# Stage 1: Builder (의존성 설치 및 빌드)
+# ==============================================================================
+FROM python:3.11-alpine AS builder
+
+WORKDIR /build
+
+# Alpine 빌드에 필요한 최소한의 시스템 패키지 설치 (C 확장 모듈 빌드 등 대비)
+RUN apk add --no-cache gcc musl-dev libffi-dev
+
+# 의존성 파일 복사 및 가상환경(venv) 생성
+COPY requirements.txt .
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# pip 및 기본 툴 업데이트 후 패키지 설치 (--no-cache-dir로 캐시 적재 방지)
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir -r requirements.txt
+
+
+# ==============================================================================
+# Stage 2: Runner (최종 실행 이미지)
+# ==============================================================================
+FROM python:3.11-alpine AS runner
+
+WORKDIR /app
+
+# 보안 가이드: curl 설치 (HEALTHCHECK용) 및 앱 실행을 위한 non-root 유저 생성
+RUN apk add --no-cache curl && \
+    addgroup -S appgroup && \
+    adduser -S appuser -G appgroup
+
+# Builder 스테이지에서 필요한 가상환경 결과물만 복사
+COPY --from=builder /opt/venv /opt/venv
+# 애플리케이션 소스 코드 복사 및 소유권 변경
+COPY --chown=appuser:appgroup ./src /app
+
+# 환경 변수 설정: 파이썬 경로 고정 및 버퍼링 해제 (로그 유실 방지)
+ENV PATH="/opt/venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+# 보안 가이드: non-root 유저로 전환
+USER appuser
+
+# 컨테이너 포트 개방
+EXPOSE 8000
+
+# 쿠버네티스/도커가 주기적으로 앱 상태를 감시할 수 있도록 HEALTHCHECK 설정
+# main.py에 정의된 /health 엔드포인트를 30초마다 확인합니다.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:8000/health || exit 1
+
+# FastAPI 애플리케이션 구동 명령 (Uvicorn 구동)
+CMD ["uvicorn", "settlement.main:app", "--host", "0.0.0.0", "--port", "8000"]
