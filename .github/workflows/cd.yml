@@ -16,6 +16,13 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
+    - name: Clean up existing Kind cluster
+    run: |
+      if kind get clusters | grep -q '^kind$'; then
+        echo "Existing cluster found. Deleting..."
+        kind delete cluster --name kind
+      fi
+
     # 2. 지정된 이름으로 kind 클러스터 생성 또는 연동
     - name: Set up kind Cluster
       uses: engineerd/setup-kind@v0.5.0
