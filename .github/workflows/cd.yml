@@ -1,0 +1,44 @@
+name: FastAPI Settlement System CD Pipeline
+
+on:
+  workflow_run:
+    workflows: ["FastAPI Settlement System CI/CD Pipeline"]
+    types:
+      - completed
+
+jobs:
+  deploy-to-kind:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: self-hosted
+
+    steps:
+    # 1. 소스 코드 체크아웃 (프로젝트 내의 k8s/*.yaml 매니페스트 파일을 읽기 위해 필수)
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    # 2. 지정된 이름으로 kind 클러스터 생성 또는 연동
+    - name: Set up kind Cluster
+      uses: engineerd/setup-kind@v0.5.0
+      with:
+        version: "v0.20.0"
+        cluster_name: "settlement-local"
+
+    # 3. 빌드 완료된 도커 이미지를 'settlement-local' 클러스터 내부로 적재
+    - name: Load Image into kind Cluster
+      run: |
+        kind load docker-image settlement:latest --name settlement-local
+
+    # 4. 요구사항 반영: 프로젝트 내 k8s 폴더의 정의 파일을 참조하여 쿠버네티스 배포 수행
+    - name: Deploy to kind Cluster using Manifest Files
+      run: |
+        # k8s/deployment.yaml 파일의 설정을 읽어와서 클러스터에 배포/업데이트합니다.
+        kubectl apply -f k8s/deployment.yaml
+        
+        # k8s/service.yaml 파일의 설정을 읽어와서 네트워크(포트) 설정을 적용합니다.
+        kubectl apply -f k8s/service.yaml
+        
+        # 새롭게 빌드 및 적재된 settlement:latest 이미지가 확실하게 컨테이너에 리프레시되도록 롤아웃합니다.
+        kubectl rollout restart deployment/settlement-app
+        
+        # 배포가 완료된 후 집(Pod)들이 정상적인 상태(Running)인지 최종 확인합니다.
+        kubectl get pods
