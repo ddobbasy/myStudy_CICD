@@ -38,7 +38,8 @@ jobs:
         kubectl apply -f k8s/service.yaml
         
         # 새롭게 빌드 및 적재된 settlement:latest 이미지가 확실하게 컨테이너에 리프레시되도록 롤아웃합니다.
-        kubectl rollout restart deployment/settlement-app
+        #kubectl rollout restart deployment/settlement-app
+        kubectl rollout restart deployment/settlement
         
         # 배포가 완료된 후 집(Pod)들이 정상적인 상태(Running)인지 최종 확인합니다.
         kubectl get pods
