@@ -8,7 +8,7 @@ on:
 
 jobs:
   ci-pipeline:
-    # runs-on: ubuntu-latest
+    # 요구사항 1: GitHub 기본 주최 서버 대신 자체 구축한 self-hosted runner에서 실행합니다.
     runs-on: self-hosted
 
     steps:
@@ -21,7 +21,7 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: "3.11"
-        cache: "pip" # pip 의존성 캐싱으로 빌드 속도 향상
+        cache: "pip"
 
     # 3. 필수 및 개발용 의존성 패키지 설치
     - name: Install dependencies
@@ -33,29 +33,41 @@ jobs:
     # 4. Ruff를 이용한 코드 품질 및 린트 검사
     - name: Lint with Ruff
       run: |
-        # --format=github 옵션은 에러 발생 시 깃허브 PR 창에 직접 어노테이션을 달아줍니다.
-        ruff check . --fix 
+        ruff check . --fix
 
     # 5. Black을 이용한 코드 스타일 통일성 검사
     - name: Check formatting with Black
       run: |
-        # --check 옵션은 파일 내용을 직접 수정하지 않고, 포맷이 맞지 않으면 빌드를 실패 처리합니다.
         black --check --diff .
 
-    # 6. Pytest 테스트 수행 및 커버리지 검증 (80% 이상 조건 적용)
+    # 6. Pytest 테스트 수행 및 커버리지 검증 (80% 이상)
     - name: Run tests and verify coverage
       run: |
-        # pythonpath 설정을 통해 settlement 패키지를 올바르게 인식하도록 유도합니다.
-        # --cov-fail-under=80 옵션으로 인해 커버리지가 80% 미만이면 파이프라인이 즉시 실패합니다.
         export PYTHONPATH=$PYTHONPATH:$(pwd)/src
         pytest --cov=settlement --cov-report=term-missing --cov-fail-under=80
 
-    # 7. Trivy를 이용한 소스 코드 취약점 진단 (CRITICAL 등급 감지)
-    - name: Run Trivy vulnerability scanner (FS mode)
+    # 7. Docker 빌드 환경 설정 (Buildx 설정)
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    # 8. 요구사항 2: Docker 이미지 빌드 (이미지명: settlement)
+    - name: Build Docker Image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./Dockerfile
+        load: true # 빌드한 이미지를 로컬 도커 엔진에 로드 (Trivy 스캔용)
+        tags: settlement:latest
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    # 9. 요구사항 3: 빌드된 'settlement' 이미지에 대해 Trivy 취약점 진단 수행
+    - name: Run Trivy vulnerability scanner on Docker Image
       uses: aquasecurity/trivy-action@master
       with:
-        scan-type: 'fs'
-        scan-ref: '.'
+        image-ref: 'settlement:latest' # 스캔 대상 이미지
+        scan-type: 'image'
         format: 'table'
-        severity: 'CRITICAL'
-        exit-code: '1' # CRITICAL 취약점 발견 시 빌드를 실패(1)로 종료하여 배포를 막음
+        severity: 'CRITICAL'           # CRITICAL 등급만 필터링
+        ignore-unfixed: true          # 요구사항 4: OS/패키지 벤더사에서 배포한 패키지(패치본)가 없는 취약점은 제외
+        exit-code: '1'                 # 조건에 부합하는 취약점 발견 시 파이프라인 실패 처리
